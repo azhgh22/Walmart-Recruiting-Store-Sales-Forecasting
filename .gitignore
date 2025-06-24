@@ -67,6 +67,8 @@ venv.bak/
 
 *.log
 
+*.csv
+
 wandb/
 
 *.nbconvert.ipynb
