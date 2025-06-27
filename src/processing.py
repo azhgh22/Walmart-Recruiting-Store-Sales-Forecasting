@@ -4,9 +4,6 @@ import pandas as pd
 from typing import Dict, Tuple
 from . import config
 
-# --- Helper functions for individual steps (Unchanged) ---
-# These are single-responsibility and work well.
-
 def _merge_features(df: pd.DataFrame, features_df: pd.DataFrame) -> pd.DataFrame:
     return pd.merge(df, features_df, on=['Store', 'Date', 'IsHoliday'], how='left')
 
@@ -16,7 +13,7 @@ def _merge_stores(df: pd.DataFrame, stores_df: pd.DataFrame) -> pd.DataFrame:
 def _process_dates_and_sort(df: pd.DataFrame) -> pd.DataFrame:
     if config.DATE_COLUMN in df.columns:
         df[config.DATE_COLUMN] = pd.to_datetime(df[config.DATE_COLUMN])
-        sort_keys = [col for col in ['Store', 'Dept', config.DATE_COLUMN] if col in df.columns]
+        sort_keys = [col for col in [config.DATE_COLUMN, 'Store', 'Dept'] if col in df.columns]
         if sort_keys:
             df = df.sort_values(by=sort_keys).reset_index(drop=True)
     return df

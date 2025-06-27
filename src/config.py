@@ -19,3 +19,6 @@ VAL_RATIO = 0.2
 
 TARGET_COLUMN = "Weekly_Sales"
 DATE_COLUMN = "Date"
+
+# Analysis parameters
+RANDOM_SEED = 42
