@@ -66,7 +66,7 @@ import matplotlib.pyplot as plt
 from statsmodels.graphics.tsaplots import plot_acf
 from statsmodels.tsa.seasonal import seasonal_decompose
 
-def analyze_department_acf(series, seasonal_lag=52, plot_title=None, seasonal_decomposition=False):
+def analyze_acf(series, seasonal_lag=52, plot_title=None, seasonal_decomposition=False):
     """
     Analyze autocorrelation of a time series with optional seasonal differencing,
     plot ACF and seasonal decomposition if enough data points.
@@ -108,7 +108,7 @@ def analyze_department_acf(series, seasonal_lag=52, plot_title=None, seasonal_de
 
 
 
-def analyze_department_pacf(series, seasonal_lag=52, plot_title=None, seasonal_decomposition=False):
+def analyze_pacf(series, seasonal_lag=52, plot_title=None, seasonal_decomposition=False):
     """
     Analyze partial autocorrelation of a time series with optional seasonal differencing,
     plot PACF and seasonal decomposition if enough data points.
