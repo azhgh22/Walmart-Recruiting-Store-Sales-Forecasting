@@ -79,7 +79,7 @@ def run_preprocessing(
     
     return processed_dfs
 
-def split_data(
+def split_data_by_ratio(
     dataframe: pd.DataFrame,
     separate_target: bool = True,
     target_column: str = config.TARGET_COLUMN
@@ -87,6 +87,23 @@ def split_data(
     split_index = int(config.TRAIN_RATIO * len(dataframe))
     train_df = dataframe.iloc[:split_index]
     valid_df = dataframe.iloc[split_index:]
+
+    if separate_target:
+        X_train = train_df.drop(columns=[target_column])
+        y_train = train_df[target_column]
+        X_valid = valid_df.drop(columns=[target_column])
+        y_valid = valid_df[target_column]
+        return X_train, y_train, X_valid, y_valid
+    return train_df, valid_df
+    
+
+def split_data(
+    dataframe: pd.DataFrame,
+    separate_target: bool = True,
+    target_column: str = config.TARGET_COLUMN
+):
+    train_df = dataframe[dataframe["Date"] < config.SPLIT_DATE]
+    valid_df = dataframe[dataframe["Date"] >= config.SPLIT_DATE]
 
     if separate_target:
         X_train = train_df.drop(columns=[target_column])
