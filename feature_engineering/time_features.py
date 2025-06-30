@@ -24,34 +24,38 @@ class FeatureAdder(BaseEstimator, TransformerMixin):
         add_holiday_proximity (bool): If True, adds features for days until/since a holiday.
         add_holiday_windows (bool): If True, adds flags for weeks before/after holidays.
         add_fourier_features (bool): If True, adds sine/cosine features for cyclical time data.
-        lags (list): A list of integer lags to create for the 'Weekly_Sales' column.
-        rolling_windows (list): A list of integer window sizes for rolling statistics.
+        add_month_and_year (bool): If True, adds Month and Year features for time data.
+        list_of_holiday_proximity (list): If non empty, does same as add_holiday_proximity, but for spacific holiday. 
     """
     def __init__(self,
                  add_week_num=True,
                  add_holiday_flags=True,
                  add_holiday_proximity=True,
-                 add_holiday_windows=True,
+                 add_holiday_windows=False,
                  add_fourier_features=True,
-                 lags=[52],
+                 add_month_and_year=True,
+                 list_of_holiday_proximity=list(set(HOLIDAY_DATES.values())),
                  holiday_dates=HOLIDAY_DATES,
-                 rolling_windows=[4, 12]):
+                 ):
 
         self.holiday_dates = holiday_dates
         self.add_week_num = add_week_num
+        self.add_month_and_year = add_month_and_year
         self.add_holiday_flags = add_holiday_flags
         self.add_holiday_proximity = add_holiday_proximity
         self.add_holiday_windows = add_holiday_windows
         self.add_fourier_features = add_fourier_features
-        self.lags = lags
-        self.rolling_windows = rolling_windows
+        self.list_of_holiday_proximity = list_of_holiday_proximity
 
     def fit(self, X, y=None):
         return self
 
-    def transform(self, X, y=None):
+    def transform(self, X):
         X_ = X.copy()
         X_['Date'] = pd.to_datetime(X_['Date'])
+
+        if self.add_month_and_year or self.add_fourier_features:
+          self._add_month_and_year(X_)
 
         if self.add_week_num:
             self._add_week_number(X_)
@@ -69,14 +73,10 @@ class FeatureAdder(BaseEstimator, TransformerMixin):
             self._add_pre_post_holiday_windows(X_)
         
         if self.add_fourier_features and 'WeekOfYear' in X_.columns:
-            self._add_month_and_year(X_)
             self._add_fourier_features(X_)
-            
-        if self.lags:
-            self._add_lag_features(X_)
-            
-        if self.rolling_windows:
-            self._add_rolling_window_features(X_)
+
+        if self.list_of_holiday_proximity:
+            self._add_proximity_to_specific_holidays(X_)
             
         if 'HolidayName' in X_.columns:
             X_ = X_.drop(columns=['HolidayName'])
@@ -100,44 +100,55 @@ class FeatureAdder(BaseEstimator, TransformerMixin):
         df[dummies.columns] = dummies
 
     def _add_proximity_to_holidays(self, df):
-        holiday_dates = sorted([pd.to_datetime(d) for d in self.holiday_dates.keys()])
-        indices = np.searchsorted(holiday_dates, df['Date'].values)
+      holiday_dates = sorted([pd.to_datetime(d) for d in self.holiday_dates.keys()])
+      safe_dates = pd.to_datetime(df['Date'], errors='coerce')
+      indices = np.searchsorted(holiday_dates, safe_dates)
+
+      next_holiday_dates = [holiday_dates[i] if i < len(holiday_dates) else pd.NaT for i in indices]
+      df['Days_until_next_holiday'] = (pd.to_datetime(next_holiday_dates) - df['Date']).dt.days
+
+      last_holiday_dates = [holiday_dates[i-1] if i > 0 else pd.NaT for i in indices]
+      df['Days_since_last_holiday'] = (df['Date'] - pd.to_datetime(last_holiday_dates)).dt.days
+      
+      df.fillna({'Days_until_next_holiday': 999, 'Days_since_last_holiday': 999}, inplace=True)
+
+    def _add_proximity_to_specific_holidays(self, df):
+      for holiday in self.list_of_holiday_proximity:
+        holiday_dates = sorted([pd.to_datetime(d) for d, name in self.holiday_dates.items() if name == holiday])
+        if len(holiday_dates) == 0:
+          continue
+        safe_dates = pd.to_datetime(df['Date'], errors='coerce')
+        indices = np.searchsorted(holiday_dates, safe_dates)
 
         next_holiday_dates = [holiday_dates[i] if i < len(holiday_dates) else pd.NaT for i in indices]
-        df['Days_until_next_holiday'] = (pd.to_datetime(next_holiday_dates) - df['Date']).dt.days
+        df[f'Days_until_next_{holiday}'] = (pd.to_datetime(next_holiday_dates) - df['Date']).dt.days
 
         last_holiday_dates = [holiday_dates[i-1] if i > 0 else pd.NaT for i in indices]
-        df['Days_since_last_holiday'] = (df['Date'] - pd.to_datetime(last_holiday_dates)).dt.days
+        df[f'Days_since_last_{holiday}'] = (df['Date'] - pd.to_datetime(last_holiday_dates)).dt.days
         
-        df.fillna({'Days_until_next_holiday': 999, 'Days_since_last_holiday': 999}, inplace=True)
+        df.fillna({f'Days_until_next_{holiday}': 999, f'Days_since_last_{holiday}': 999}, inplace=True)
 
     def _add_pre_post_holiday_windows(self, df):
-        holiday_cols = [col for col in df.columns if col.startswith('Is_')]
-        for col in holiday_cols:
-            holiday_name = col.split('Is_')[1]
-            df[f'Week_before_{holiday_name}'] = df.groupby('Store')[col].shift(-1).fillna(0)
-            df[f'Week_after_{holiday_name}'] = df.groupby('Store')[col].shift(1).fillna(0)
+      unique_holidays = set(self.holiday_dates.values())
+      for holiday_name in unique_holidays:
+          holiday_specific_dates = pd.to_datetime([
+              date_str for date_str, name in self.holiday_dates.items() if name == holiday_name
+          ])
+          
+          df[f'Is_7_Days_Before_{holiday_name}'] = 0
+          df[f'Is_7_Days_After_{holiday_name}'] = 0
+
+          for holiday_date in holiday_specific_dates:
+              before_mask = (df['Date'] >= holiday_date - pd.Timedelta(days=7)) & (df['Date'] < holiday_date)
+              after_mask = (df['Date'] > holiday_date) & (df['Date'] <= holiday_date + pd.Timedelta(days=7))
+              df.loc[before_mask, f'Is_7_Days_Before_{holiday_name}'] = 1
+              df.loc[after_mask, f'Is_7_Days_After_{holiday_name}'] = 1
     
     def _add_fourier_features(self, df):
         df['week_sin'] = np.sin(2 * np.pi * df['WeekOfYear'] / 52)
         df['week_cos'] = np.cos(2 * np.pi * df['WeekOfYear'] / 52)
         df['month_sin'] = np.sin(2 * np.pi * df['Month'] / 12)
         df['month_cos'] = np.cos(2 * np.pi * df['Month'] / 12)
-
-    def _add_lag_features(self, df):
-        if 'Weekly_Sales' not in df.columns:
-            return
-        for lag in self.lags:
-            df[f'sales_lag_{lag}'] = df.groupby('Store')['Weekly_Sales'].shift(lag)
-
-    def _add_rolling_window_features(self, df):
-        if 'Weekly_Sales' not in df.columns:
-            return
-
-        for w in self.rolling_windows:
-            shifted_sales = df.groupby('Store')['Weekly_Sales'].shift(1)
-            df[f'sales_rolling_mean_{w}'] = shifted_sales.rolling(window=w, min_periods=1).mean()
-            df[f'sales_rolling_std_{w}'] = shifted_sales.rolling(window=w, min_periods=1).std()
 
 
 
