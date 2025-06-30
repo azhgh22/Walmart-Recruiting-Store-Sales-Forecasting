@@ -79,6 +79,69 @@ def run_preprocessing(
     
     return processed_dfs
 
+def create_store_level_data(
+    dataframes: Dict[str, pd.DataFrame],
+    process_train: bool = True,
+    process_test: bool = True,
+    drop_raw_components: bool = False
+) -> Dict[str, pd.DataFrame]:
+    """
+    Aggregates department-level data to the store level, using dedicated
+    helper functions for merging and sorting.
+
+    Args:
+        dataframes (Dict[str, pd.DataFrame]): A dictionary of raw dataframes.
+        process_train (bool): If True, processes the 'train' dataframe.
+        process_test (bool): If True, processes the 'test' dataframe.
+        drop_raw_components (bool): If True, modifies the input dictionary
+            by deleting used source keys.
+
+    Returns:
+        Dict[str, pd.DataFrame]: A dictionary with the processed store-level
+            dataframes, keyed by their original name ('train', 'test').
+    """
+
+    store_level_dfs = {}
+    keys_to_process = [
+        key for key in ['train', 'test'] 
+        if (key == 'train' and process_train and 'train' in dataframes) or \
+           (key == 'test' and process_test and 'test' in dataframes)
+    ]
+
+    if not keys_to_process:
+        print("Warning: No dataframes selected for store-level processing.")
+        return {}
+    
+    try:
+        features_df = dataframes['features']
+        stores_df = dataframes['stores']
+    except KeyError as e:
+        raise KeyError(f"The 'dataframes' dictionary is missing a required key: {e}")
+
+    for key in keys_to_process:
+        sales_df = dataframes[key]
+        grouping_cols = ['Store', config.DATE_COLUMN, 'IsHoliday']
+        
+        if key == 'train':
+            processed_df = sales_df.groupby(grouping_cols)[config.TARGET_COLUMN].mean().reset_index()
+        else:
+            processed_df = sales_df[grouping_cols].drop_duplicates().reset_index(drop=True)
+
+        processed_df = _merge_stores(processed_df, stores_df)
+        processed_df = _merge_features(processed_df, features_df)
+        processed_df = _process_dates_and_sort(processed_df)
+        store_level_dfs[key] = processed_df
+
+    if drop_raw_components:
+        keys_to_drop = ['features', 'stores']
+        keys_to_drop.extend(keys_to_process)
+        
+        for key_to_drop in set(keys_to_drop):
+            if key_to_drop in dataframes:
+                del dataframes[key_to_drop]
+
+    return store_level_dfs
+
 def split_data_by_ratio(
     dataframe: pd.DataFrame,
     separate_target: bool = True,
