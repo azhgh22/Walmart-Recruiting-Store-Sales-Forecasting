@@ -36,6 +36,7 @@ class FeatureAdder(BaseEstimator, TransformerMixin):
                  add_month_and_year=True,
                  list_of_holiday_proximity=list(set(HOLIDAY_DATES.values())),
                  holiday_dates=HOLIDAY_DATES,
+                 replace_time_index = True,
                  ):
 
         self.holiday_dates = holiday_dates
@@ -46,8 +47,11 @@ class FeatureAdder(BaseEstimator, TransformerMixin):
         self.add_holiday_windows = add_holiday_windows
         self.add_fourier_features = add_fourier_features
         self.list_of_holiday_proximity = list_of_holiday_proximity
+        self.replace_time_index = replace_time_index
 
     def fit(self, X, y=None):
+        if self.replace_time_index:
+          self.start_date_ = pd.to_datetime(X['Date']).min()
         return self
 
     def transform(self, X):
@@ -59,9 +63,6 @@ class FeatureAdder(BaseEstimator, TransformerMixin):
 
         if self.add_week_num:
             self._add_week_number(X_)
-
-        if self.add_holiday_flags or self.add_holiday_proximity or self.add_holiday_windows:
-            self._add_holiday_name_column(X_)
 
         if self.add_holiday_flags:
             self._add_specific_holiday_flags(X_)
@@ -77,9 +78,9 @@ class FeatureAdder(BaseEstimator, TransformerMixin):
 
         if self.list_of_holiday_proximity:
             self._add_proximity_to_specific_holidays(X_)
-            
-        if 'HolidayName' in X_.columns:
-            X_ = X_.drop(columns=['HolidayName'])
+
+        if self.replace_time_index:
+          self._replace_date_with_time_index(X_)
             
         return X_
 
@@ -90,14 +91,22 @@ class FeatureAdder(BaseEstimator, TransformerMixin):
         df['Month'] = df['Date'].dt.month
         df['Year'] = df['Date'].dt.year
 
-    def _add_holiday_name_column(self, df):
-        df['HolidayName'] = df['Date'].dt.strftime('%Y-%m-%d').map(self.holiday_dates).fillna('NoHoliday')
-
     def _add_specific_holiday_flags(self, df):
-        dummies = pd.get_dummies(df['HolidayName'], prefix='Is')
-        if 'Is_NoHoliday' in dummies.columns:
-            dummies = dummies.drop(columns=['Is_NoHoliday'])
-        df[dummies.columns] = dummies
+      date_str = df['Date'].dt.strftime('%Y-%m-%d')
+
+      for holiday_name in set(self.holiday_dates.values()):
+          holiday_dates = {
+              date for date, name in self.holiday_dates.items() if name == holiday_name
+          }
+          df[f'Is_{holiday_name}'] = date_str.isin(holiday_dates).astype(int)
+
+    def _replace_date_with_time_index(self, df):
+        if self.start_date_ is None:
+            raise RuntimeError("The transformer has not been fitted yet. Call .fit() before .transform().")
+        dates = pd.to_datetime(df['Date'])
+        time_delta_days = (dates - self.start_date_).dt.days
+        df.drop(columns=['Date'], inplace=True)
+        df['Date'] = (time_delta_days / 7).astype(int)
 
     def _add_proximity_to_holidays(self, df):
       holiday_dates = sorted([pd.to_datetime(d) for d in self.holiday_dates.keys()])
@@ -113,11 +122,11 @@ class FeatureAdder(BaseEstimator, TransformerMixin):
       df.fillna({'Days_until_next_holiday': 999, 'Days_since_last_holiday': 999}, inplace=True)
 
     def _add_proximity_to_specific_holidays(self, df):
+      safe_dates = pd.to_datetime(df['Date'], errors='coerce')
       for holiday in self.list_of_holiday_proximity:
         holiday_dates = sorted([pd.to_datetime(d) for d, name in self.holiday_dates.items() if name == holiday])
         if len(holiday_dates) == 0:
           continue
-        safe_dates = pd.to_datetime(df['Date'], errors='coerce')
         indices = np.searchsorted(holiday_dates, safe_dates)
 
         next_holiday_dates = [holiday_dates[i] if i < len(holiday_dates) else pd.NaT for i in indices]
