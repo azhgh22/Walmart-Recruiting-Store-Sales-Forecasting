@@ -37,6 +37,8 @@ class FeatureAdder(BaseEstimator, TransformerMixin):
                  list_of_holiday_proximity=list(set(HOLIDAY_DATES.values())),
                  holiday_dates=HOLIDAY_DATES,
                  replace_time_index = True,
+                 add_dummy_date = False,
+                 start_date = None
                  ):
 
         self.holiday_dates = holiday_dates
@@ -48,15 +50,23 @@ class FeatureAdder(BaseEstimator, TransformerMixin):
         self.add_fourier_features = add_fourier_features
         self.list_of_holiday_proximity = list_of_holiday_proximity
         self.replace_time_index = replace_time_index
+        self.add_dummy_date = add_dummy_date
+        self.start_date = start_date
 
     def fit(self, X, y=None):
         if self.replace_time_index:
-          self.start_date_ = pd.to_datetime(X['Date']).min()
+          if self.start_date is not None:
+            self.start_date_ = self.start_date
+          else:
+            self.start_date_ = pd.to_datetime(X['Date']).min()
         return self
 
     def transform(self, X):
         X_ = X.copy()
         X_['Date'] = pd.to_datetime(X_['Date'])
+
+        if self.add_dummy_date:
+          X_['DateDummy'] = ((X_['Date'] - self.start_date_).dt.days // 7).astype(int)
 
         if self.add_month_and_year or self.add_fourier_features:
           self._add_month_and_year(X_)
