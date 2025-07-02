@@ -1,3 +1,9 @@
 kaggle
 wandb
 onnx
+pandas
+numpy
+xgboost
+scikit-learn
+dagshub
+mlflow
