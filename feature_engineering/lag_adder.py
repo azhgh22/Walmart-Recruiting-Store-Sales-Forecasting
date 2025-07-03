@@ -1,45 +1,25 @@
 from sklearn.base import BaseEstimator, TransformerMixin
 import pandas as pd
 import numpy as np
-
-class GroupMeanImputer(BaseEstimator, TransformerMixin):
-    def __init__(self, group_cols=['Store', 'Dept'], target_cols=None, fallback=0):
-        self.group_cols = group_cols
-        self.target_cols = target_cols
-        self.fallback = fallback
-        self.group_means_ = None
-
-    def fit(self, X, y=None):
-        X = X.copy()
-        if self.target_cols is None:
-            self.target_cols = X.select_dtypes(include='number').columns[
-                X.isna().any()
-            ].tolist()
-
-        self.group_means_ = (
-            X.groupby(self.group_cols)[self.target_cols]
-            .mean()
-            .reset_index()
-        )
-        return self
-
-    def transform(self, X):
-        X = X.copy()
-        for col in self.target_cols:
-            # Merge group means
-            means = self.group_means_[[*self.group_cols, col]]
-            X = X.merge(means, on=self.group_cols, how='left', suffixes=('', '_group_mean'),sort=False)
-
-            # Fill NaN with group mean, then fallback
-            X[col] = X[col].fillna(X[f'{col}_group_mean'])
-            X[col] = X[col].fillna(self.fallback)
-
-            # Drop helper column
-            X.drop(columns=[f'{col}_group_mean'], inplace=True)
-        return X
+from feature_engineering.imputers import GroupMeanImputer
 
 
 class LagAdder(BaseEstimator, TransformerMixin):
+ """
+ Adds lag features to a time-series dataset and makes predictions step-by-step using a pre-fit model.
+
+ Parameters:
+ -----------
+ val : pd.Series or pd.DataFrame
+     Target variable values for training.
+ model : object
+     Machine learning model with `.fit()` and `.predict()` methods.
+ lag_num : int
+     Number of lag features to add (default is 2).
+ date_col : str
+    Name of the date column (default is 'DateDummy').
+ """
+    
   def __init__(self, val ,model ,lag_num:int = 2,date_col = 'DateDummy') -> None:
     super().__init__()
     self.lag_num = lag_num
