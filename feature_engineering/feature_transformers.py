@@ -33,7 +33,7 @@ class GroupStatFeatureAdder(BaseEstimator, TransformerMixin):
 
         group_df = X[self.groupby_cols].copy()
         group_df["_target_"] = target.values
-        grouped = group_df.groupby(self.groupby_cols)["_target_"].agg(self.aggfunc).reset_index()
+        grouped = group_df.groupby(self.groupby_cols, observed=True)["_target_"].agg(self.aggfunc).reset_index()
 
         new_feature_name = self.feature_name or f"{'_'.join(self.groupby_cols)}_{self.aggfunc}"
         grouped = grouped.rename(columns={"_target_": new_feature_name})

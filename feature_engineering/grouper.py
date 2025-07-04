@@ -31,7 +31,7 @@ def group_and_aggregate(
     if groupby_cols is None:
         raise ValueError("groupby_cols must be provided")
 
-    grouped = X.groupby(groupby_cols)
+    grouped = X.groupby(groupby_cols, observed=True)
     constant_cols = []
     for col in X.columns:
         if col in groupby_cols:
@@ -45,7 +45,7 @@ def group_and_aggregate(
     if y is not None:
         df_y = X[groupby_cols].copy()
         df_y['__target__'] = y.values
-        y_grouped = df_y.groupby(groupby_cols)['__target__'].agg(y_aggfunc)
+        y_grouped = df_y.groupby(groupby_cols, observed=True)['__target__'].agg(y_aggfunc)
         y_result = X_result[groupby_cols].apply(lambda row: y_grouped.loc[tuple(row)], axis=1)
         return X_result, y_result.reset_index(drop=True)
     else:
