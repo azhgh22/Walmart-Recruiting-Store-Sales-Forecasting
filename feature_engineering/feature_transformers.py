@@ -78,3 +78,13 @@ class ChangeColumns(BaseEstimator, TransformerMixin):
             return X_copy.drop(columns=self.columns_to_drop, errors='ignore')
 
         return X_copy
+
+class BoolToInt(BaseEstimator, TransformerMixin):
+    def fit(self, X, y=None):
+        return self
+    def transform(self, X):
+        X_ = X.copy()
+        for col in X_.select_dtypes(include='bool').columns:
+            X_[col] = X_[col].astype(int)
+        return X_
+
