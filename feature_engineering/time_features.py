@@ -54,11 +54,10 @@ class FeatureAdder(BaseEstimator, TransformerMixin):
         self.start_date = start_date
 
     def fit(self, X, y=None):
-        if self.replace_time_index:
-          if self.start_date is not None:
-            self.start_date_ = self.start_date
-          else:
-            self.start_date_ = pd.to_datetime(X['Date']).min()
+        if self.start_date is not None:
+          self.start_date_ = self.start_date
+        else:
+          self.start_date_ = pd.to_datetime(X['Date']).min()
         return self
 
     def transform(self, X):
