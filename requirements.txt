@@ -7,3 +7,5 @@ xgboost
 scikit-learn
 dagshub
 mlflow
+protobuf==4.25.3
+nbeats-pytorch
