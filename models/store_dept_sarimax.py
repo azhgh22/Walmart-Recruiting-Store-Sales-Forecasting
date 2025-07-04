@@ -1,4 +1,5 @@
 import warnings
+import gc
 from sklearn.base import BaseEstimator, RegressorMixin
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 import pandas as pd
@@ -44,17 +45,25 @@ class StoreDeptSARIMAX(BaseEstimator, RegressorMixin):
             )
             
             if self.filterwarnings:
-              with warnings.catch_warnings():
-                  warnings.filterwarnings(
-                      "ignore",
-                      message="Too few observations to estimate starting parameters for seasonal ARMA.*"
-                  )
-                  self.models_[(store, dept)] = model.fit(disp=False)
+                with warnings.catch_warnings():
+                    warnings.filterwarnings(
+                        "ignore",
+                        message="Too few observations to estimate starting parameters for seasonal ARMA.*"
+                    )
+                    fitted_model = model.fit(disp=False)
             else:
-                self.models_[(store, dept)] = model.fit(disp=False)
+                fitted_model = model.fit(disp=False)
+            
+            self.models_[(store, dept)] = fitted_model
 
             if self.verbose:
                 print(f"Fitted SARIMAX model for Store {store}, Dept {dept}")
+
+            del model
+            del ts
+            del exog
+            del group
+            gc.collect()
 
         return self
 
