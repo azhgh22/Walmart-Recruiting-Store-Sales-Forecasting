@@ -1,140 +1,114 @@
-import warnings
-import gc
-from sklearn.base import BaseEstimator, RegressorMixin
-from statsmodels.tsa.statespace.sarimax import SARIMAX
 import pandas as pd
+import warnings
+from sklearn.base import BaseEstimator, RegressorMixin
+from sklearn.exceptions import NotFittedError
+from statsmodels.tsa.statespace.sarimax import SARIMAX
 
 class StoreDeptSARIMAX(BaseEstimator, RegressorMixin):
     """
     SARIMAX-based forecaster trained per (Store, Dept) group.
 
+    This model trains a separate SARIMAX model for each combination of
+    'Store' and 'Dept' found in the training data. It is designed to be
+    fully silent, suppressing all warnings and errors during model fitting
+    and prediction. Failed models or predictions will result in NaN values.
+
     Parameters:
     -----------
-    order : tuple, default=(1,1,1)
-        The (p, d, q) order of the ARIMA model.
-    seasonal : bool, default=False
-        Whether to use seasonal ARIMA.
-    seasonal_order : tuple, default=(0,0,0,0)
-        The (P, D, Q, s) order of the seasonal component.
+    order : tuple, default=(1, 1, 1)
+        The (p, d, q) order of the non-seasonal component of the ARIMA model.
+    seasonal_order : tuple, default=(0, 0, 0, 0)
+        The (P, D, Q, s) order of the seasonal component. Set s > 1 to
+        use seasonal ARIMA.
     use_all_exog : bool, default=False
-        If True, all non-key columns are treated as exogenous.
-    verbose : int, default=1
-        -1 = silent, 1 = log if Store or Dept divisible by 10, 2 = log all.
-    filterwarnings : bool, default=False
-        If True, suppress all warnings during model fitting.
-    save_to_disk : bool, default=False
-        If True, saves each fitted model to disk as 'model_Store_Dept.pkl'.
+        If True, all columns in X other than 'Store', 'Dept', and 'Date'
+        are treated as exogenous variables.
     """
-
-    def __init__(self, order=(1,1,1), seasonal=False, seasonal_order=(0,0,0,0), 
-                 use_all_exog=False, verbose=1, filterwarnings=False, save_to_disk=False):
+    def __init__(self, order=(1, 1, 1), seasonal_order=(0, 0, 0, 0),
+                 use_all_exog=False):
         self.order = order
-        self.seasonal = seasonal
         self.seasonal_order = seasonal_order
         self.use_all_exog = use_all_exog
         self.exog_cols = None
         self.models_ = {}
-        self.verbose = verbose
-        self.filterwarnings = filterwarnings
-        self.save_to_disk = save_to_disk
 
     def fit(self, X, y):
+        """
+        Fits a SARIMAX model for each (Store, Dept) group, suppressing all output.
+        """
         data = X.copy()
-        data["y"] = y.values
-        self.models_ = {}
+        data["y"] = y
 
         if self.use_all_exog:
-            exclude_cols = {"Store", "Dept", "Date"}
-            self.exog_cols = [col for col in data.columns if col not in exclude_cols and col != "y"]
-        else:
-            self.exog_cols = None
+            exclude_cols = {"Store", "Dept", "Date", "y"}
+            self.exog_cols = [col for col in data.columns if col not in exclude_cols]
+            if not self.exog_cols: self.exog_cols = None
 
-        for (store, dept), group in data.groupby(["Store", "Dept"]):
+        for key, group in data.groupby(["Store", "Dept"]):
             group = group.sort_values("Date")
             group['Date'] = pd.to_datetime(group['Date'])
             group = group.set_index('Date')
-            group = group.asfreq('W')
 
             ts = group['y']
-            if ts.dropna().empty:
-                if self.verbose >= 1:
-                    print(f"Skipping Store {store}, Dept {dept} due to empty or all NaN time series")
-                continue
+            if ts.dropna().empty: continue
 
-            exog = None
-            if self.exog_cols:
-                exog = group[self.exog_cols]
+            exog_data = group[self.exog_cols] if self.exog_cols else None
 
-            model = SARIMAX(
-                ts,
-                order=self.order,
-                seasonal_order=self.seasonal_order if self.seasonal else (0, 0, 0, 0),
-                exog=exog,
-                enforce_stationarity=False,
-                enforce_invertibility=False
-            )
-
-            if self.filterwarnings:
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore")  
+            # The key fix: The warning suppressor now wraps BOTH the model
+            # initialization and the fitting process.
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore")
+                try:
+                    # Initialize the model inside the suppressor
+                    model = SARIMAX(
+                        endog=ts, exog=exog_data, order=self.order,
+                        seasonal_order=self.seasonal_order,
+                        enforce_stationarity=False, enforce_invertibility=False
+                    )
+                    # Fit the model
                     fitted_model = model.fit(disp=False)
-            else:
-                fitted_model = model.fit(disp=False)
-
-            self.models_[(store, dept)] = fitted_model
-
-            if self.save_to_disk:
-                import joblib
-                filename = f"model_store{store}_dept{dept}.pkl"
-                joblib.dump(fitted_model, filename)
-
-            if self.verbose == 2 or (self.verbose == 1 and (store % 10 == 0 or dept % 10 == 0)):
-                print(f"Fitted SARIMAX model for Store {store}, Dept {dept}")
-
-            del model, ts, exog, group
-            gc.collect()
-
+                    self.models_[key] = fitted_model
+                except Exception:
+                    # Silently skip any group that fails to initialize or fit
+                    pass
         return self
 
     def predict(self, X):
-        if self.exog_cols is None and self.use_all_exog:
-            exclude_cols = {"Store", "Dept", "Date"}
-            self.exog_cols = [col for col in X.columns if col not in exclude_cols]
+        """
+        Generates predictions for each row in X, suppressing all errors and warnings.
+        """
+        if not hasattr(self, 'models_') or not self.models_:
+            raise NotFittedError("This model has not been fitted yet. Call fit() before predict().")
 
-        preds = []
-        for idx, row in X.iterrows():
-            key = (row["Store"], row["Dept"])
-            date = pd.to_datetime(row["Date"])
-            store, dept = key
+        X_pred = X.copy()
+        X_pred['Date'] = pd.to_datetime(X_pred['Date'])
+        
+        predictions = pd.Series(index=X_pred.index, dtype=float)
 
-            if key not in self.models_:
-                preds.append(float("nan"))
-                continue
-
-            model = self.models_[key]
-
-            exog = None
-            if self.exog_cols:
-                exog = row[self.exog_cols].values.reshape(1, -1)
-
-            try:
-                pred_series = model.predict(start=date, end=date, exog=exog)
-                if len(pred_series) == 0:
-                    if self.verbose >= 1:
-                        print(f"No prediction returned for Store {store}, Dept {dept} on {date}")
-                    pred = float("nan")
-                else:
-                    pred = pred_series.iloc[0]
-            except Exception as e:
-                if self.verbose == 2:
-                    print(f"Prediction error for Store {store}, Dept {dept} on {date}: {e}")
-                pred = float("nan")
-
-            preds.append(pred)
-
-            if self.verbose == 2 or (self.verbose == 1 and (store % 10 == 0 or dept % 10 == 0)):
-                print(f"Predicted value for Store {store}, Dept {dept} on {date}: {pred}")
-
-            gc.collect()
-
-        return pd.Series(preds, index=X.index)
+        for key, group in X_pred.groupby(["Store", "Dept"]):
+            if key in self.models_:
+                with warnings.catch_warnings():
+                    warnings.filterwarnings("ignore")
+                    try:
+                        model = self.models_[key]
+                        group_for_pred = group.drop_duplicates(subset=['Date']).sort_values("Date").set_index("Date")
+                        
+                        if group_for_pred.empty: continue
+                            
+                        start_date = group_for_pred.index.min()
+                        end_date = group_for_pred.index.max()
+                        exog_data = group_for_pred[self.exog_cols] if self.exog_cols else None
+                        
+                        group_preds_by_date = model.predict(
+                            start=start_date, end=end_date, exog=exog_data
+                        )
+                        
+                        mapped_preds = group['Date'].map(group_preds_by_date)
+                        mapped_preds.index = group.index
+                        
+                        predictions.update(mapped_preds)
+                    except Exception:
+                        # If prediction fails, the values remain NaN
+                        pass
+        
+        return predictions

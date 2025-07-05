@@ -12,7 +12,9 @@ sarima_config = {
     "seasonal_order": (1, 1, 1, 52), 
     "use_all_exog": False,
     "filterwarnings": True,
-    "verbose": 0
+    "verbose": 0,
+    "random_sampling": True, 
+    "number_of_dept_store": 50,
 }
 
 sarimax_config = {
@@ -22,5 +24,7 @@ sarimax_config = {
     "seasonal_order": (1, 1, 1, 52), 
     "use_all_exog": False,
     "filterwarnings": True,
-    "verbose": 0
+    "verbose": 0,
+    "random_sampling": True,
+    "number_of_dept_store": 30
 }
