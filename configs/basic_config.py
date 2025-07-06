@@ -8,8 +8,6 @@ TIME_FEATURE_PRESETS = {
     "minimal": ['Month', 'Year'],
 }
 
-
-
 config = {
     'merge1': 'train, store, how=left, on=Store',
     'merge2': 'train, features, how=left, on=Store, Date, IsHoliday',
@@ -23,4 +21,45 @@ config = {
         'weight on holidays': 5,
         'weight on non_holidays': 1
     },
+}
+
+minimal_config = {
+  'merge1': 'train, store, how=left, on=Store',
+  'merge2': 'train, features, how=left, on=Store, Date, IsHoliday',
+  'merged_tables': ['train', 'stores', 'features'],
+  'start_date': '2010-02-05',
+    'score_metric': 'WMAE',
+    'score_policy': {
+        'weight on holidays': 5,
+        'weight on non_holidays': 1
+    },
+}
+
+store_avg_config = {
+  'merge1': 'train, store, how=left, on=Store',
+  'merge2': 'train, features, how=left, on=Store, Date, IsHoliday',
+  'merged_tables': ['train', 'stores', 'features'],
+  "group_by" : "Store",
+  'time_features': TIME_FEATURE_PRESETS['default'],
+  'replace_time_index': True,
+  'start_date': '2010-02-05',
+  'score_metric': 'WMAE',
+  'score_policy': {
+      'weight on holidays': 5,
+      'weight on non_holidays': 1
+  },
+}
+
+
+dept_avg_config = {
+  'merged_tables': ['train'],
+  "group_by" : "Dept",
+  'time_features': TIME_FEATURE_PRESETS['default'],
+  'replace_time_index': True,
+  'start_date': '2010-02-05',
+  'score_metric': 'WMAE',
+  'score_policy': {
+      'weight on holidays': 5,
+      'weight on non_holidays': 1
+  },
 }
