@@ -5,20 +5,20 @@ from feature_engineering.imputers import GroupMeanImputer
 
 
 class LagAdder(BaseEstimator, TransformerMixin):
- """
- Adds lag features to a time-series dataset and makes predictions step-by-step using a pre-fit model.
+  """
+  Adds lag features to a time-series dataset and makes predictions step-by-step using a pre-fit model.
 
- Parameters:
- -----------
- val : pd.Series or pd.DataFrame
-     Target variable values for training.
- model : object
-     Machine learning model with `.fit()` and `.predict()` methods.
- lag_num : int
-     Number of lag features to add (default is 2).
- date_col : str
-    Name of the date column (default is 'DateDummy').
- """
+  Parameters:
+  -----------
+  val : pd.Series or pd.DataFrame
+      Target variable values for training.
+  model : object
+      Machine learning model with `.fit()` and `.predict()` methods.
+  lag_num : int
+      Number of lag features to add (default is 2).
+  date_col : str
+      Name of the date column (default is 'DateDummy').
+  """
     
   def __init__(self, val ,model ,lag_num:int = 2,date_col = 'DateDummy') -> None:
     super().__init__()
