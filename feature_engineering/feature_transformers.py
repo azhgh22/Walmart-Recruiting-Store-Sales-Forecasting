@@ -88,3 +88,13 @@ class BoolToInt(BaseEstimator, TransformerMixin):
             X_[col] = X_[col].astype(int)
         return X_
 
+class Cat2Num(BaseEstimator, TransformerMixin):
+  def fit(self, X, y=None):
+    return self
+
+  def transform(self, X, y=None):
+    x_copy = X.copy()
+    x_copy.pop('Date')
+    x_copy.IsHoliday = x_copy.IsHoliday.astype(int)
+    x_copy.Type = x_copy.Type.astype('category').cat.codes
+    return x_copy

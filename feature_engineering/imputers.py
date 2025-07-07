@@ -1,6 +1,23 @@
 from sklearn.base import BaseEstimator, TransformerMixin
 import pandas as pd
 import numpy as np
+from sklearn.impute import SimpleImputer
+
+class NaImputer(BaseEstimator, TransformerMixin):
+  def __init__(self, strategy='mean'):
+    self.strategy = strategy
+    self.imputer = SimpleImputer(strategy=strategy)
+    self.na_cols = []
+
+  def fit(self, X, y=None):
+    self.na_cols = [col for col in X.columns if X[col].isna().sum() > 0]
+    self.imputer.fit(X[self.na_cols])
+    return self
+
+  def transform(self, X, y=None):
+    x_copy = X.copy()
+    x_copy[self.na_cols] = self.imputer.transform(x_copy[self.na_cols])
+    return x_copy
 
 class GroupMeanImputer(BaseEstimator, TransformerMixin):
   """
