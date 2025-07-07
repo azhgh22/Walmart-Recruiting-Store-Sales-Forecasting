@@ -19,5 +19,14 @@ nbeats_config = {
     'shared_weights':True,
     'optimizer': 'torch.optim.AdamW',
     'activation': 'ReLU'
+}
 
+tft_config = {
+    'input_size': 60,          
+    'output_size': 53,         
+    'dropout': 0.1,             
+    'max_steps': 20 * 104,      
+    'random_seed': 42,                    
+    'learning_rate': 1e-3,     
+    'optimizer': 'adam',        
 }
