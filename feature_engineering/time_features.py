@@ -169,5 +169,35 @@ class FeatureAdder(BaseEstimator, TransformerMixin):
         df['month_cos'] = np.cos(2 * np.pi * df['Month'] / 12)
 
 
+class WeeklyStoreDept(BaseEstimator, TransformerMixin):
+    def __init__(self, store_col='Store', dept_col='Dept', week_col='WeekOfYear', target_col='Weekly_Sales'):
+        self.store_col = store_col
+        self.dept_col = dept_col
+        self.week_col = week_col
+        self.target_col = target_col
 
+    def fit(self, X, y=None):
+        df = X.copy()
+        if y is not None:
+            df[self.target_col] = y
+
+        # Build group columns list
+        self.group_cols_ = [col for col in [self.store_col, self.dept_col, self.week_col] if col is not None]
+
+        self.weekly_avg_ = (
+            df.groupby(self.group_cols_)[self.target_col]
+            .mean()
+            .rename('weekly_avg')
+            .reset_index()
+        )
+        return self
+
+    def transform(self, X):
+        df = X.copy()
+        df = df.merge(
+            self.weekly_avg_,
+            how='left',
+            on=self.group_cols_
+        )
+        return df
             
